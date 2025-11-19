@@ -4,6 +4,7 @@ go 1.24.5
 
 require (
 	github.com/charmbracelet/fang v0.4.4
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/markbates/goth v1.82.0
 	github.com/spf13/cobra v1.10.1
