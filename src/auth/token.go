@@ -41,6 +41,11 @@ func verifyToken(tokenString string) (id string, err error) {
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		id = claims["user_id"].(string)
+
+		if id == "" {
+			return "", fmt.Errorf("invalid id")
+		}
+
 		return
 	}
 

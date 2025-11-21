@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"hash"
 	"io"
 	"os"
 
@@ -38,6 +40,14 @@ var up = &cobra.Command{
 		if err != nil {
 			return
 		}
+
+		hasher := sha256.New()
+
+		if _, err = io.Copy(hasher, descriptor); err != nil {
+			return
+		}
+
+		req := client.NewRequest()
 
 		reader, writer := io.Pipe()
 
