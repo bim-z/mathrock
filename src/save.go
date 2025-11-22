@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -19,75 +18,88 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func save(ctx echo.Context) (err error) {
-	id := auth.UserId(ctx)
+func save(ctx echo.Context) error {
+	userID := auth.UserId(ctx)
 
 	fileHeader, err := ctx.FormFile("file")
 	if err != nil {
-		return
+		return err
 	}
 
 	descriptor, err := fileHeader.Open()
 	if err != nil {
-		return
+		return err
 	}
 	defer descriptor.Close()
+
+	// Hashing dulu
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, descriptor); err != nil {
+		return err
+	}
+	hash := fmt.Sprintf("%x", hasher.Sum(nil))
+	descriptor.Seek(0, 0)
 
 	tx := db.DB.Begin()
 	defer tx.Rollback()
 
-	// Cari file berdasarkan (user_id, filename)
-	fl := new(model.File)
-	err = tx.Where("name = ? AND user_id = ?", fileHeader.Filename, id).First(&fl).Error
-	if err != nil {
-		return
+	var result struct {
+		File    model.File        `gorm:"embedded"`
+		Version model.FileVersion `gorm:"embedded"`
 	}
 
-	// Hash
-	hasher := sha256.New()
-	if _, err = io.Copy(hasher, descriptor); err != nil {
-		return
-	}
-	descriptor.Seek(0, io.SeekStart)
-	hash := fmt.Sprintf("%x", hasher.Sum(nil))
-
-	lastVersion := new(model.FileVersion)
-	_ = tx.Where("file_id = ?", fl.ID).Order("version DESC").First(&lastVersion).Error
-
-	if lastVersion.Hash == hash {
-		return ctx.JSON(http.StatusOK, map[string]string{"message": "no change"})
+	// Pastikan hanya satu record hasil JOIN yang diambil, yaitu yang terbesar (terbaru)
+	if err = tx.Table("files").
+		Select("files.id AS id, files.name, files.user_id, files.hash, file_versions.id AS version_id, file_versions.version, file_versions.hash AS version_hash").
+		Joins("LEFT JOIN file_versions ON file_versions.file_id = files.id").
+		Where("files.name = ? AND files.user_id = ?", fileHeader.Filename, userID).
+		Order("file_versions.version DESC").
+		Limit(1).
+		Scan(&result).Error; err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "file not found")
 	}
 
-	_, err = rock.Rock.Get(context.Background(), hash).Result()
-	if err == redis.Nil {
-		if _, err = storage.Box.PutObject(context.Background(), &s3.PutObjectInput{
+	// Jika hash sama → tidak perlu buat versi baru
+	if result.Version.Hash == hash {
+		return echo.NewHTTPError(http.StatusBadRequest, "no changes")
+	}
+
+	// Upload hanya jika hash belum pernah tersimpan
+	if _, err := rock.Rock.Get(ctx.Request().Context(), hash).Result(); err == redis.Nil {
+		_, err := storage.Box.PutObject(ctx.Request().Context(), &s3.PutObjectInput{
 			Bucket: aws.String(os.Getenv("BUCKET_NAME")),
 			Key:    aws.String(hash),
 			Body:   descriptor,
-		}); err != nil {
-			return
+		})
+		if err != nil {
+			return err
 		}
 
-		rock.Rock.Set(context.Background(), hash, "1", 0)
-	} else if err != nil {
-		return
+		rock.Rock.Set(ctx.Request().Context(), hash, "1", 0)
 	}
 
-	// Tambah versi baru
+	// Hitung next version
+	nextVersion := result.Version.Version + 1
+
 	newVersion := model.FileVersion{
-		FileID:  fl.ID,
-		Version: lastVersion.Version + 1,
+		FileID:  result.File.ID,
+		Version: nextVersion,
 		Hash:    hash,
 		Size:    fileHeader.Size,
 	}
 
-	if err = tx.Create(&newVersion).Error; err != nil {
-		return
-	}
+	tx.Create(&newVersion)
+
+	// Update file to latest hash
+	tx.Model(&model.File{}).
+		Where("id = ?", result.File.ID).
+		Update("hash", hash)
 
 	tx.Commit()
-	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "saved",
-		"version": fmt.Sprint(newVersion.Version),
+
+	return ctx.JSON(http.StatusOK, echo.Map{
+		"message": "updated",
+		"version": nextVersion,
+		"hash":    hash,
 	})
 }
