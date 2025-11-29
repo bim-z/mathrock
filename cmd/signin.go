@@ -11,7 +11,7 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
-var login = &cobra.Command{
+var signin = &cobra.Command{
 	Use:   "login",
 	Short: "Log in to your account",
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
