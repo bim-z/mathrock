@@ -1,5 +1,5 @@
-package main
+package rest
 
 import "resty.dev/v3"
 
-var client = resty.New()
+var Client = resty.New()

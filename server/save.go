@@ -32,7 +32,6 @@ func save(ctx echo.Context) error {
 	}
 	defer descriptor.Close()
 
-	// Hashing dulu
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, descriptor); err != nil {
 		return err
@@ -48,23 +47,20 @@ func save(ctx echo.Context) error {
 		Version model.FileVersion `gorm:"embedded"`
 	}
 
-	// Pastikan hanya satu record hasil JOIN yang diambil, yaitu yang terbesar (terbaru)
 	if err = tx.Table("files").
 		Select("files.id AS id, files.name, files.user_id, files.hash, file_versions.id AS version_id, file_versions.version, file_versions.hash AS version_hash").
 		Joins("LEFT JOIN file_versions ON file_versions.file_id = files.id").
-		Where("files.name = ? AND files.user_id = ?", fileHeader.Filename, userID).
+		Where("files.name = ? AND files.user_id = ? AND files.locked = ?", fileHeader.Filename, userID, false).
 		Order("file_versions.version DESC").
 		Limit(1).
 		Scan(&result).Error; err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "file not found")
 	}
 
-	// Jika hash sama → tidak perlu buat versi baru
 	if result.Version.Hash == hash {
 		return echo.NewHTTPError(http.StatusBadRequest, "no changes")
 	}
 
-	// Upload hanya jika hash belum pernah tersimpan
 	if _, err := rock.Rock.Get(ctx.Request().Context(), hash).Result(); err == redis.Nil {
 		_, err := storage.Box.PutObject(ctx.Request().Context(), &s3.PutObjectInput{
 			Bucket: aws.String(os.Getenv("BUCKET_NAME")),
@@ -78,7 +74,6 @@ func save(ctx echo.Context) error {
 		rock.Rock.Set(ctx.Request().Context(), hash, "1", 0)
 	}
 
-	// Hitung next version
 	nextVersion := result.Version.Version + 1
 
 	newVersion := model.FileVersion{
@@ -90,10 +85,7 @@ func save(ctx echo.Context) error {
 
 	tx.Create(&newVersion)
 
-	// Update file to latest hash
-	tx.Model(&model.File{}).
-		Where("id = ?", result.File.ID).
-		Update("hash", hash)
+	tx.Model(&model.File{}).Where("id = ?", result.File.ID).Update("hash", hash)
 
 	tx.Commit()
 

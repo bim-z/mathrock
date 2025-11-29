@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/log"
+	"github.com/mathrock-xyz/starducc/cmd/rest"
 	"github.com/spf13/cobra"
 )
 
@@ -35,5 +37,27 @@ var up = &cobra.Command{
 		if err != nil {
 			return
 		}
+
+		res, err := rest.
+			Client.
+			R().
+			SetFileReader("file", file.Name(), descriptor).
+			Post("/")
+
+		if err != nil {
+			return
+		}
+
+		response, err := rest.Parse(res)
+		if err != nil {
+			return
+		}
+
+		if response.Status == "error" {
+			return fmt.Errorf(response.Message)
+		}
+
+		log.Info("Succes")
+		return
 	},
 }
