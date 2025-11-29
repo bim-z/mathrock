@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,23 +21,41 @@ import (
 )
 
 func save(ctx echo.Context) error {
+	userID := auth.UserId(ctx)
+	if userID == "" {
+		return ctx.JSON(http.StatusUnauthorized, echo.Map{
+			"error": "please login before updating",
+		})
+	}
+
 	header, err := ctx.FormFile("file")
 	if err != nil {
-		return err
+		return ctx.JSON(http.StatusBadRequest, echo.Map{
+			"error": "file is required",
+		})
 	}
 
 	descriptor, err := header.Open()
 	if err != nil {
-		return err
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to open file",
+		})
 	}
 	defer descriptor.Close()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, descriptor); err != nil {
-		return err
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to read file",
+		})
 	}
 	hash := fmt.Sprintf("%x", hasher.Sum(nil))
-	descriptor.Seek(0, 0)
+
+	if _, err := descriptor.Seek(0, 0); err != nil {
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to reset file reader",
+		})
+	}
 
 	tx := db.DB.Begin()
 	defer tx.Rollback()
@@ -45,8 +65,6 @@ func save(ctx echo.Context) error {
 		Version model.FileVersion `gorm:"embedded"`
 	}
 
-	userID := auth.UserId(ctx)
-
 	if err = tx.Table("files").
 		Select("files.id AS id, files.name, files.user_id, files.hash, file_versions.id AS version_id, file_versions.version, file_versions.hash AS version_hash").
 		Joins("LEFT JOIN file_versions ON file_versions.file_id = files.id").
@@ -54,24 +72,39 @@ func save(ctx echo.Context) error {
 		Order("file_versions.version DESC").
 		Limit(1).
 		Scan(&result).Error; err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "file not found")
+		return ctx.JSON(http.StatusNotFound, echo.Map{
+			"error": "file not found",
+		})
 	}
 
 	if result.Version.Hash == hash {
-		return echo.NewHTTPError(http.StatusBadRequest, "no changes")
+		return ctx.JSON(http.StatusBadRequest, echo.Map{
+			"error": "no changes detected",
+		})
 	}
 
-	if _, err := rock.Rock.Get(ctx.Request().Context(), hash).Result(); err == redis.Nil {
-		_, err := storage.Box.PutObject(ctx.Request().Context(), &s3.PutObjectInput{
-			Bucket: aws.String(os.Getenv("BUCKET_NAME")),
+	_, err = rock.Rock.Get(context.Background(), hash).Result()
+	if err == redis.Nil {
+		_, err := storage.Box.PutObject(context.Background(), &s3.PutObjectInput{
+			Bucket: aws.String(os.Getenv("bucket_name")),
 			Key:    aws.String(hash),
 			Body:   descriptor,
 		})
 		if err != nil {
-			return err
+			return ctx.JSON(http.StatusInternalServerError, echo.Map{
+				"error": "failed to upload file",
+			})
 		}
 
-		rock.Rock.Set(ctx.Request().Context(), hash, "1", 0)
+		if err = rock.Rock.Set(context.Background(), hash, "1", 0).Err(); err != nil {
+			return ctx.JSON(http.StatusInternalServerError, echo.Map{
+				"error": "failed to store metadata",
+			})
+		}
+	} else if err != nil && !errors.Is(err, redis.Nil) {
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to check file status",
+		})
 	}
 
 	nextVersion := result.Version.Version + 1
@@ -83,14 +116,22 @@ func save(ctx echo.Context) error {
 		Size:    header.Size,
 	}
 
-	tx.Create(&newVersion)
+	if err := tx.Create(&newVersion).Error; err != nil {
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to save new file version",
+		})
+	}
 
-	tx.Model(&model.File{}).Where("id = ?", result.File.ID).Update("hash", hash)
+	if err := tx.Model(&model.File{}).Where("id = ?", result.File.ID).Update("hash", hash).Error; err != nil {
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to update file record",
+		})
+	}
 
 	tx.Commit()
 
 	return ctx.JSON(http.StatusOK, echo.Map{
-		"message": "updated",
+		"message": "file updated",
 		"version": nextVersion,
 		"hash":    hash,
 	})

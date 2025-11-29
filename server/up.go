@@ -39,7 +39,7 @@ func up(ctx echo.Context) error {
 	descriptor, err := file.Open()
 	if err != nil {
 		return ctx.JSON(echo.ErrInternalServerError.Code, echo.Map{
-			"error": "failed to open file, please try again",
+			"error": "failed to open file",
 		})
 	}
 	defer descriptor.Close()
@@ -97,5 +97,8 @@ func up(ctx echo.Context) error {
 		})
 	}
 
-	return ctx.String(http.StatusOK, "")
+	return ctx.JSON(http.StatusOK, echo.Map{
+		"message": "file uploaded",
+		"hash":    hash,
+	})
 }
