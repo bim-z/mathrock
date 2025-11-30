@@ -23,38 +23,28 @@ import (
 func save(ctx echo.Context) error {
 	userID := auth.UserId(ctx)
 	if userID == "" {
-		return ctx.JSON(http.StatusUnauthorized, echo.Map{
-			"error": "please login before updating",
-		})
+		return echo.NewHTTPError(http.StatusUnauthorized, "please login before updating")
 	}
 
 	header, err := ctx.FormFile("file")
 	if err != nil {
-		return ctx.JSON(http.StatusBadRequest, echo.Map{
-			"error": "file is required",
-		})
+		return echo.NewHTTPError(http.StatusBadRequest, "file is required")
 	}
 
 	descriptor, err := header.Open()
 	if err != nil {
-		return ctx.JSON(http.StatusInternalServerError, echo.Map{
-			"error": "failed to open file",
-		})
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to open file")
 	}
 	defer descriptor.Close()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, descriptor); err != nil {
-		return ctx.JSON(http.StatusInternalServerError, echo.Map{
-			"error": "failed to read file",
-		})
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to read file")
 	}
 	hash := fmt.Sprintf("%x", hasher.Sum(nil))
 
 	if _, err := descriptor.Seek(0, 0); err != nil {
-		return ctx.JSON(http.StatusInternalServerError, echo.Map{
-			"error": "failed to reset file reader",
-		})
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to reset file reader")
 	}
 
 	tx := db.DB.Begin()
@@ -72,15 +62,11 @@ func save(ctx echo.Context) error {
 		Order("file_versions.version DESC").
 		Limit(1).
 		Scan(&result).Error; err != nil {
-		return ctx.JSON(http.StatusNotFound, echo.Map{
-			"error": "file not found",
-		})
+		return echo.NewHTTPError(http.StatusNotFound, "file not found")
 	}
 
 	if result.Version.Hash == hash {
-		return ctx.JSON(http.StatusBadRequest, echo.Map{
-			"error": "no changes detected",
-		})
+		return echo.NewHTTPError(http.StatusBadRequest, "no changes detected")
 	}
 
 	_, err = rock.Rock.Get(context.Background(), hash).Result()
@@ -91,20 +77,14 @@ func save(ctx echo.Context) error {
 			Body:   descriptor,
 		})
 		if err != nil {
-			return ctx.JSON(http.StatusInternalServerError, echo.Map{
-				"error": "failed to upload file",
-			})
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to upload file")
 		}
 
 		if err = rock.Rock.Set(context.Background(), hash, "1", 0).Err(); err != nil {
-			return ctx.JSON(http.StatusInternalServerError, echo.Map{
-				"error": "failed to store metadata",
-			})
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to store metadata")
 		}
 	} else if err != nil && !errors.Is(err, redis.Nil) {
-		return ctx.JSON(http.StatusInternalServerError, echo.Map{
-			"error": "failed to check file status",
-		})
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to check file status")
 	}
 
 	nextVersion := result.Version.Version + 1
@@ -117,15 +97,11 @@ func save(ctx echo.Context) error {
 	}
 
 	if err := tx.Create(&newVersion).Error; err != nil {
-		return ctx.JSON(http.StatusInternalServerError, echo.Map{
-			"error": "failed to save new file version",
-		})
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save new file version")
 	}
 
 	if err := tx.Model(&model.File{}).Where("id = ?", result.File.ID).Update("hash", hash).Error; err != nil {
-		return ctx.JSON(http.StatusInternalServerError, echo.Map{
-			"error": "failed to update file record",
-		})
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update file record")
 	}
 
 	tx.Commit()
