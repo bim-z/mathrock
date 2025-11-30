@@ -11,15 +11,23 @@ import (
 	"github.com/mathrock-xyz/starducc/server/storage"
 )
 
-func undo(ctx echo.Context) (err error) {
-	id := auth.UserId(ctx)
+func undo(ctx echo.Context) error {
+	userId := auth.UserId(ctx)
+	if userId == "" {
+		return ctx.JSON(http.StatusUnauthorized, echo.Map{
+			"error": "please login before undoing",
+		})
+	}
 
-	file, err := ctx.FormFile("file")
+	header, err := ctx.FormFile("file")
 	if err != nil {
-		return
+		return ctx.JSON(http.StatusBadRequest, echo.Map{
+			"error": "file is required",
+		})
 	}
 
 	tx := db.DB.Begin()
+	defer tx.Rollback()
 
 	var result struct {
 		File    model.File        `gorm:"embedded"`
@@ -27,28 +35,40 @@ func undo(ctx echo.Context) (err error) {
 	}
 
 	if err = tx.Table("files").
-		Select("files.id AS id, files.name, files.user_id, files.hash, file_versions.id AS version_id, file_versions.version, file_versions.hash AS version_hash").
-		Joins("LEFT JOIN file_versions ON file_versions.file_id = files.id").
-		Where("files.name = ? AND files.user_id = ?", file.Filename, id).
-		Order("file_versions.version DESC").
+		Select("files.id as id, files.name, files.locked, files.user_id, files.hash, file_versions.id as version_id, file_versions.version, file_versions.hash as version_hash").
+		Joins("left join file_versions on file_versions.file_id = files.id").
+		Where("files.name = ? and files.user_id = ? and files.locked = ?", header.Filename, userId, false).
+		Order("file_versions.version desc").
 		Limit(1).
 		Scan(&result).Error; err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "file not found")
+		return ctx.JSON(http.StatusNotFound, echo.Map{
+			"error": "file not found",
+		})
 	}
 
-	if result.Version.Version == 1 {
-		return
+	if result.Version.Version <= 1 {
+		return ctx.JSON(http.StatusBadRequest, echo.Map{
+			"error": "no previous version available",
+		})
 	}
 
-	version := new(model.FileVersion)
-	if err = tx.Where("file_id = ? AND version = ?", result.File.ID, result.Version.Version-1).
-		First(&version).Error; err != nil {
-		return
+	var prev model.FileVersion
+	if err = tx.Where("file_id = ? and version = ?", result.File.ID, result.Version.Version-1).
+		First(&prev).Error; err != nil {
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to load previous version",
+		})
 	}
 
 	object, err := storage.Box.GetObject(ctx.Request().Context(), &s3.GetObjectInput{
-		Key: &version.Hash,
+		Bucket: nil,
+		Key:    &prev.Hash,
 	})
+	if err != nil {
+		return ctx.JSON(http.StatusInternalServerError, echo.Map{
+			"error": "failed to retrieve file data",
+		})
+	}
 
-	return ctx.Stream(7, "", object.Body)
+	return ctx.Stream(http.StatusOK, "application/octet-stream", object.Body)
 }
