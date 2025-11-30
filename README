@@ -1,1 +1,7 @@
-# starducc
+starducc
+========
+
+Starducc is a lightweight file storage system 
+with automatic file versioning. 
+Every update to a file creates a new version, 
+allowing users to restore and manage previous states at any time
