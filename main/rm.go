@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/mathrock-xyz/starducc/server/auth"
-	"github.com/mathrock-xyz/starducc/server/db"
-	"github.com/mathrock-xyz/starducc/server/db/model"
+	"github.com/mathrock-xyz/starducc/main/auth"
+	"github.com/mathrock-xyz/starducc/main/db"
+	"github.com/mathrock-xyz/starducc/main/db/model"
 )
 
 func rm(ctx echo.Context) (err error) {

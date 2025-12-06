@@ -23,7 +23,7 @@ func Auth(next echo.HandlerFunc) echo.HandlerFunc {
 
 		token := parts[1]
 
-		id, err := verifyToken(token)
+		id, err := verifytoken(token)
 
 		if err != nil {
 			return echo.NewHTTPError(http.StatusUnauthorized, err.Error())

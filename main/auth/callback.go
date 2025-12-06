@@ -6,8 +6,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
-	"github.com/mathrock-xyz/starducc/server/db"
-	"github.com/mathrock-xyz/starducc/server/db/model"
+	"github.com/mathrock-xyz/starducc/main/db"
+	"github.com/mathrock-xyz/starducc/main/db/model"
 )
 
 func Callback(ctx echo.Context) (err error) {
@@ -23,7 +23,7 @@ func Callback(ctx echo.Context) (err error) {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	token, err := createToken(user.Email)
+	token, err := createtoken(user.Email)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
