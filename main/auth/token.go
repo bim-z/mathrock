@@ -10,7 +10,7 @@ import (
 
 var secret = os.Getenv("JWT_SECRET")
 
-func createToken(email string) (string, error) {
+func createtoken(email string) (string, error) {
 	token := jwt.NewWithClaims(
 		jwt.SigningMethodHS256,
 		jwt.MapClaims{
@@ -26,7 +26,7 @@ func createToken(email string) (string, error) {
 	return tokenString, nil
 }
 
-func verifyToken(tokenString string) (id string, err error) {
+func verifytoken(tokenString string) (id string, err error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		return secret, nil
 	})
