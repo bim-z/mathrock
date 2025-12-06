@@ -15,6 +15,7 @@ var root = &cobra.Command{
 			save,
 			rm,
 			delete,
+			restore,
 			cp,
 			latest,
 			lock,

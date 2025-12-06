@@ -1,19 +1,22 @@
 package main
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
-	"github.com/mathrock-xyz/starducc/server/auth"
-	"github.com/mathrock-xyz/starducc/server/db"
-	"github.com/mathrock-xyz/starducc/server/db/model"
+	"github.com/mathrock-xyz/starducc/main/auth"
+	"github.com/mathrock-xyz/starducc/main/db"
+	"github.com/mathrock-xyz/starducc/main/db/model"
+	"gorm.io/gorm"
 )
 
 func clear(ctx echo.Context) (err error) {
-	id := auth.UserId(ctx)
-	fileName := ctx.FormValue("name")
-	if fileName == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "file name required")
+	userid, name := auth.UserId(ctx), ctx.FormValue("name")
+	if name == "" {
+		return echo.NewHTTPError(
+			http.StatusBadRequest, "file name required",
+		)
 	}
 
 	tx := db.DB.Begin()
@@ -21,44 +24,64 @@ func clear(ctx echo.Context) (err error) {
 
 	var result struct {
 		File      model.File `gorm:"embedded"`
-		VersionID string     `gorm:"column:version_id"`
+		VersionID uint       `gorm:"column:version_id"`
 		Hash      string     `gorm:"column:version_hash"`
 	}
 
-	// get latest version
+	// get the latest version record (we only need the file ID, latest version ID, and the hash)
 	err = tx.Table("files").
-		Select("files.id, file_versions.id AS version_id, file_versions.hash AS version_hash").
-		Joins("LEFT JOIN file_versions ON file_versions.file_id = files.id").
-		Where("files.name = ? AND files.user_id = ?", fileName, id).
-		Order("file_versions.version DESC").
+		Select("files.id, file_versions.id AS version_id, versions.hash AS version_hash").
+		Joins("INNER JOIN file_versions ON versions.file_id = files.id").
+		Where("files.name = ? AND files.user_id = ?", name, userid).
+		Order("versions.version DESC").
 		Limit(1).
 		Scan(&result).Error
-	if err != nil || result.VersionID == "" {
-		return echo.NewHTTPError(http.StatusNotFound, "file not found")
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return echo.NewHTTPError(
+				http.StatusNotFound,
+				"file not found or has no versions",
+			)
+		}
+		return echo.NewHTTPError(
+			http.StatusInternalServerError,
+			"database query failed to find latest version",
+		)
 	}
 
-	latestFileID := result.File.ID
-	latestVersionID := result.VersionID
-	latestHash := result.Hash
+	latestid := result.File.ID
+	latestverid := result.VersionID
+	latesthash := result.Hash
 
-	// delete old versions (keep latest)
-	if err = tx.Where("file_id = ? AND id != ?", latestFileID, latestVersionID).
-		Delete(&model.FileVersion{}).Error; err != nil {
-		return
+	// permanently delete all versions of the file except the latest one
+	if err = tx.Unscoped().
+		Where("file_id = ? AND id != ?", latestid, latestverid).
+		Delete(&model.Version{}).Error; err != nil {
+		return echo.NewHTTPError(
+			http.StatusInternalServerError,
+			"failed to delete old versions",
+		)
 	}
 
-	// reset latest version to 1
-	if err = tx.Model(&model.FileVersion{}).
-		Where("id = ?", latestVersionID).
+	// reset the version number of the surviving (latest) version to 1
+	if err = tx.Model(&model.Version{}).
+		Where("id = ?", latestverid).
 		Update("version", 1).Error; err != nil {
-		return
+		return echo.NewHTTPError(
+			http.StatusInternalServerError,
+			"failed to reset version number",
+		)
 	}
 
-	// update main file metadata
+	// update the main file record's hash to the latest version's hash (which is the correct hash, not the version ID)
 	if err = tx.Model(&model.File{}).
-		Where("id = ?", latestFileID).
-		Update("hash", latestHash).Error; err != nil {
-		return
+		Where("id = ?", latestid).
+		Update("hash", latesthash).Error; err != nil {
+		return echo.NewHTTPError(
+			http.StatusInternalServerError,
+			"failed to update file record hash",
+		)
 	}
 
 	tx.Commit()

@@ -12,50 +12,56 @@ import (
 
 var latest = &cobra.Command{
 	Use:   "latest [name]",
-	Short: "",
+	Short: "downloads the latest version of a file",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
-		if len(args) < 1 {
-			return fmt.Errorf("This command takes one argument")
-		}
-
 		name := args[0]
-		if name == "" {
-			return fmt.Errorf("This command takes one argument")
+
+		req, err := http.NewRequest("GET", "http://app.starducc.mathrock.xyz/restore/"+name, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create http request: %w", err)
 		}
 
-		req, _ := http.NewRequest("GET", "http://app.starducc.mathrock.xyz/restore/"+name, nil)
-
-		token, err := bearer()
+		token, err := bearer() // assume bearer() function exists
 		if err != nil {
-			return
+			return fmt.Errorf("failed to get authentication token: %w", err)
 		}
 
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		request := new(http.Client)
 
-		res, _ := request.Do(req)
+		res, err := request.Do(req)
+		if err != nil {
+			return fmt.Errorf("http request failed: %w", err)
+		}
 		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
-			msg, err := parse(res.Body)
+			msg, err := parse(res.Body) // assume parse() function exists
 			if err != nil {
-				return err
+				// return error if parsing the error response body fails
+				return fmt.Errorf("server returned status %d, but failed to parse error message: %w", res.StatusCode, err)
 			}
 
-			return fmt.Errorf(msg)
+			// return the error message parsed from the server response
+			return fmt.Errorf("download failed (status %d): %s", res.StatusCode, msg)
 		}
 
+		// create/overwrite the local file
 		file, err := os.Create(name)
 		if err != nil {
-			return
+			return fmt.Errorf("failed to create local file '%s': %w", name, err)
 		}
+		defer file.Close()
 
+		// copy data from the response body to the local file
 		if _, err = io.Copy(file, res.Body); err != nil {
-			return
+			// return error if copying file data fails
+			return fmt.Errorf("failed to save file content locally: %w", err)
 		}
 
-		log.Info("Succes")
+		log.Info("Success", "action", fmt.Sprintf("latest version of '%s' downloaded", name))
 		return
 	},
 }

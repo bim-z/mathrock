@@ -12,7 +12,7 @@ import (
 
 var cp = &cobra.Command{
 	Use:   "cp [name] [version]",
-	Short: "Copies a specific file version from the remote server to the local system",
+	Short: "Copies a specific file version",
 	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		name, version := args[0], args[1]
