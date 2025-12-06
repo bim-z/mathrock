@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var restore = &cobra.Command{
-	Use:   "restore",
+var latest = &cobra.Command{
+	Use:   "latest [name]",
 	Short: "",
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
 		if len(args) < 1 {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os/user"
 
 	"github.com/zalando/go-keyring"

@@ -10,51 +10,53 @@ import (
 )
 
 var delete = &cobra.Command{
-	Use:     "delete",
+	Use:     "delete [name]",
 	Aliases: []string{"del"},
-	Short:   "",
+	Args:    cobra.MinimumNArgs(1),
+	Short:   "Permanently deletes a file from the remote server",
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
-		if len(args) < 1 {
-			return fmt.Errorf("This command takes one argument")
-		}
-
 		name := args[0]
-		if name == "" {
-			return fmt.Errorf("This command takes one argument")
-		}
 
 		file, err := os.Stat(name)
 		if err != nil {
-			return
+			return fmt.Errorf("failed to get local file info: %w", err)
 		}
 
 		if file.IsDir() {
-			return fmt.Errorf("This command cannot accept folder")
+			return fmt.Errorf("this command cannot accept folder")
 		}
 
-		req, _ := http.NewRequest("DELETE", "http://app.starducc.mathrock.xyz/delete/"+file.Name(), nil)
+		req, err := http.NewRequest("DELETE", "http://app.starducc.mathrock.xyz/delete/"+name, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create HTTP request: %w", err)
+		}
 
 		token, err := bearer()
 		if err != nil {
-			return
+			return fmt.Errorf("failed to get authentication token: %w", err)
 		}
 
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		request := new(http.Client)
 
-		res, _ := request.Do(req)
+		res, err := request.Do(req)
+		if err != nil {
+			return fmt.Errorf("HTTP request failed: %w", err)
+		}
+		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
 			msg, err := parse(res.Body)
 			if err != nil {
-				return err
+				return fmt.Errorf("server returned status %d, but failed to parse error message: %w", res.StatusCode, err)
 			}
 
-			return fmt.Errorf(msg)
+			// return the error message parsed from the server response
+			return fmt.Errorf("deletion failed (Status %d): %s", res.StatusCode, msg)
 		}
 
-		log.Info("Succes")
+		log.Info("Success", "action", fmt.Sprintf("file '%s' permanently deleted", name))
 		return
 	},
 }

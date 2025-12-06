@@ -11,50 +11,55 @@ import (
 )
 
 var cp = &cobra.Command{
-	Use:   "cp",
-	Short: "",
+	Use:   "cp [name] [version]",
+	Short: "Copies a specific file version from the remote server to the local system",
+	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
-		if len(args) < 2 {
-			return fmt.Errorf("This command takes one argument")
-		}
-
 		name, version := args[0], args[1]
-		if name == "" && version == "" {
-			return fmt.Errorf("This command takes one argument")
-		}
 
-		req, _ := http.NewRequest("GET", fmt.Sprintf("http://app.starducc.mathrock.xyz/cp/%s/%s", name, version), nil)
+		req, err := http.NewRequest("GET", fmt.Sprintf("http://app.starducc.mathrock.xyz/cp/%s/%s", name, version), nil)
+		if err != nil {
+			return fmt.Errorf("failed to create HTTP request: %w", err)
+		}
 
 		token, err := bearer()
 		if err != nil {
-			return
+			return fmt.Errorf("failed to get authentication token: %w", err)
 		}
 
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		request := new(http.Client)
 
-		res, _ := request.Do(req)
+		res, err := request.Do(req)
+		if err != nil {
+			return fmt.Errorf("HTTP request failed: %w", err)
+		}
+		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
 			msg, err := parse(res.Body)
 			if err != nil {
-				return err
+				return fmt.Errorf("server returned status %d, but failed to parse error message: %w", res.StatusCode, err)
 			}
 
-			return fmt.Errorf(msg)
+			// return the error message parsed from the server response
+			return fmt.Errorf("copy failed (Status %d): %s", res.StatusCode, msg)
 		}
 
+		// create the local file to write the content
 		file, err := os.Create(name)
 		if err != nil {
-			return
+			// return error if local file creation fails
+			return fmt.Errorf("failed to create local file '%s': %w", name, err)
 		}
+		defer file.Close()
 
 		if _, err = io.Copy(file, res.Body); err != nil {
-			return
+			return fmt.Errorf("failed to save file content locally: %w", err)
 		}
 
-		log.Info("Succes")
+		log.Info("Success", "action", fmt.Sprintf("file '%s' version %s copied", name, version))
 		return
 	},
 }

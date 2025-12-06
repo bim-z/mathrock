@@ -11,7 +11,7 @@ import (
 	"github.com/mathrock-xyz/starducc/main/storage"
 )
 
-func restore(ctx echo.Context) (err error) {
+func latest(ctx echo.Context) (err error) {
 	userid, name := auth.UserId(ctx), ctx.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(

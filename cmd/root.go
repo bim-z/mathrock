@@ -9,7 +9,20 @@ var root = &cobra.Command{
 	Short: "",
 	Long:  "",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cmd.AddCommand(auth)
+		cmd.AddCommand(
+			auth,
+			up,
+			save,
+			rm,
+			delete,
+			cp,
+			latest,
+			lock,
+			unlock,
+			history,
+			info,
+			ls,
+		)
 		return cmd.Help()
 	},
 }

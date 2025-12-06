@@ -13,70 +13,77 @@ import (
 )
 
 var save = &cobra.Command{
-	Use:   "save",
-	Short: "",
+	Use:   "save [name]",
+	Short: "Saves a file and creates a new version on the remote server",
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) (err error) {
-		if len(args) < 1 {
-			return fmt.Errorf("This command takes one argument")
-		}
-
 		name := args[0]
-		if name == "" {
-			return fmt.Errorf("This command takes one argument")
-		}
 
+		// Check file existence and type
 		file, err := os.Stat(name)
 		if err != nil {
-			return
+			return fmt.Errorf("failed to get file info: %w", err)
 		}
 
 		if file.IsDir() {
-			return fmt.Errorf("This command cannot accept folder")
+			return fmt.Errorf("this command cannot accept folder")
 		}
 
 		descriptor, err := os.Open(name)
-		defer descriptor.Close()
-
 		if err != nil {
-			return
+			return fmt.Errorf("failed to open file: %w", err)
 		}
+		defer descriptor.Close()
 
 		var data bytes.Buffer
 		writer := multipart.NewWriter(&data)
 		defer writer.Close()
 
-		fw, err := writer.CreateFormField("file")
+		fw, err := writer.CreateFormFile("file", file.Name()) // Use CreateFormFile for file content
 		if err != nil {
-			return
+			return fmt.Errorf("failed to create form file writer: %w", err)
 		}
 
 		if _, err = io.Copy(fw, descriptor); err != nil {
-			return
+			return fmt.Errorf("failed to copy file data to request body: %w", err)
 		}
 
-		req, _ := http.NewRequest("POST", "http://app.starducc.mathrock.xyz", &data)
+		// close the writer
+		writer.Close()
+
+		req, err := http.NewRequest("POST", "http://app.starducc.mathrock.xyz", &data)
+		if err != nil {
+			return fmt.Errorf("failed to create HTTP request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", writer.FormDataContentType()) // Set the correct Content-Type
 
 		token, err := bearer()
 		if err != nil {
-			return
+			return fmt.Errorf("failed to get authentication token: %w", err)
 		}
 
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		request := new(http.Client)
 
-		res, _ := request.Do(req)
+		res, err := request.Do(req)
+		if err != nil {
+			return fmt.Errorf("HTTP request failed: %w", err)
+		}
+		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
 			msg, err := parse(res.Body)
 			if err != nil {
-				return err
+				return fmt.Errorf("server returned status %d, but failed to parse error message: %w", res.StatusCode, err)
 			}
 
-			return fmt.Errorf(msg)
+			// return the error message parsed from the server response
+			return fmt.Errorf("save failed (Status %d): %s", res.StatusCode, msg)
 		}
 
-		log.Info("Succes")
+		log.Info("Success", "action", "save")
 		return
 	},
 }

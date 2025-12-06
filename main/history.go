@@ -12,8 +12,7 @@ import (
 )
 
 func history(ctx echo.Context) (err error) {
-	userid, name := auth.UserId(ctx), ctx.FormValue("name")
-
+	userid, name := auth.UserId(ctx), ctx.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(
 			http.StatusBadRequest,

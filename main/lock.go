@@ -9,11 +9,10 @@ import (
 )
 
 func lock(ctx echo.Context) (err error) {
-	userid, name := auth.UserId(ctx), ctx.FormValue("name")
+	userid, name := auth.UserId(ctx), ctx.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(
-			http.StatusBadRequest,
-			"file name is required",
+			http.StatusBadRequest, "file name is required",
 		)
 	}
 
@@ -35,8 +34,7 @@ func lock(ctx echo.Context) (err error) {
 	// Check if any row was affected
 	if result.RowsAffected == 0 {
 		return echo.NewHTTPError(
-			http.StatusNotFound,
-			"file not found",
+			http.StatusNotFound, "file not found",
 		)
 	}
 

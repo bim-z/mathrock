@@ -13,14 +13,15 @@ func delete(ctx echo.Context) error {
 	userid, name := auth.UserId(ctx), ctx.Param("name")
 	if name == "" {
 		return echo.NewHTTPError(
-			http.StatusBadRequest,
-			"name is required",
+			http.StatusBadRequest, "name is required",
 		)
 	}
 
 	tx := db.DB.Begin()
 	defer tx.Rollback()
 
+	// Perform HARD DELETE (permanent deletion) using Unscoped().
+	// The file must not be locked.
 	result := tx.Unscoped().
 		Where("name = ? AND user_id = ? AND locked = ?", name, userid, false).
 		Delete(&model.File{})
@@ -28,19 +29,20 @@ func delete(ctx echo.Context) error {
 	if result.Error != nil {
 		return echo.NewHTTPError(
 			http.StatusInternalServerError,
-			"failed",
+			"failed to permanently delete file record",
 		)
 	}
 
 	if result.RowsAffected == 0 {
-		return ctx.JSON(http.StatusNotFound, echo.Map{
-			"error": "file not found",
-		})
+		return echo.NewHTTPError(
+			http.StatusNotFound,
+			"file not found or is currently locked",
+		)
 	}
 
 	tx.Commit()
 
 	return ctx.JSON(http.StatusOK, echo.Map{
-		"message": "file deleted",
+		"message": "file permanently deleted",
 	})
 }
