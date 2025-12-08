@@ -12,25 +12,25 @@ func main() {
 	route.GET("/auth/redirect", auth.Redirect)
 	route.GET("/auth/callback", auth.Callback)
 
-	route.POST("/up", up)     // Upload (assuming multipart/form-data POST)
-	route.POST("/save", save) // Save new version (assuming multipart/form-data POST)
+	route.POST("/up", up)
+	route.POST("/save", save)
 
-	route.DELETE("/rm/:name", rm)         // Soft Delete (uses URL parameter)
-	route.DELETE("/delete/:name", delete) // Permanent Delete (uses URL parameter and Unscoped)
-	route.POST("/clear", clear)           // Clear all file versions except the latest (uses FormValue, typically POST)
-	route.POST("/restore/:name", restore) // Restore soft-deleted file (uses URL parameter, typically POST)
+	route.DELETE("/rm/:name", rm)
+	route.DELETE("/delete/:name", delete)
+	route.POST("/clear", clear)
+	route.POST("/restore/:name", restore)
 
-	route.GET("/cp/:name/:version", cp)          // Copy/Download a specific version (GET is appropriate)
-	route.POST("/revert/:name/:version", revert) // Revert file structure to a specific version (POST is appropriate for modification)
-	route.GET("/undo/:name", undo)               // Undo: download previous version (GET is appropriate, although server-side logic might be complex)
+	route.GET("/cp/:name/:version", cp)
+	route.PUT("/revert/:name/:version", revert)
+	route.GET("/undo/:name", undo)
 
-	route.POST("/lock", lock)     // Lock file
-	route.POST("/unlock", unlock) // Unlock file
+	route.POST("/lock", lock)
+	route.POST("/unlock", unlock)
 
-	route.GET("/ls", ls)                 // List all files
-	route.GET("/info/:name", info)       // Get detailed file info (uses URL parameter)
-	route.GET("/history/:name", history) // Get file history (uses URL parameter)
-	route.GET("/latest/:name", latest)   // Get the latest file content (uses URL parameter)
+	route.GET("/ls", ls)
+	route.GET("/info/:name", info)
+	route.GET("/history/:name", history)
+	route.GET("/latest/:name", latest)
 
 	log.Fatal(route.Start)
 }
