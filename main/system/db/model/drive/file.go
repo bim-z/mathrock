@@ -14,5 +14,5 @@ type File struct {
 }
 
 func (File) TableName() string {
-	return "drive.file"
+	return "drive.files"
 }

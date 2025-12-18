@@ -7,5 +7,5 @@ type File struct {
 }
 
 func (File) TableName() string {
-	return "share.file"
+	return "share.files"
 }

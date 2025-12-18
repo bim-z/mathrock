@@ -9,3 +9,7 @@ type Version struct {
 	Size   int64
 	FileID string
 }
+
+func (Version) TableName() string {
+	return "drive.versions"
+}

@@ -7,6 +7,7 @@ import (
 	"github.com/bim-z/mathrock/main/system/db"
 )
 
+// initialize all system requirments
 func init() {
 	if err := box.Setup(); err != nil {
 		log.Fatal(err.Error())

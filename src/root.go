@@ -11,7 +11,7 @@ import (
 var root = &cobra.Command{
 	Use:     "mathrock",
 	Aliases: []string{"mr", "math", "rock"},
-	Short:   "Swiss army knife",
+	Short:   "Swiss army knife for privacy and productivity",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		// authentication

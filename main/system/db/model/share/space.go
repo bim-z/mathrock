@@ -2,10 +2,10 @@ package share
 
 type Space struct {
 	ID     uint
-	Name   string
+	Name   string `json:"name"`
 	UserID string
 }
 
 func (Space) TableName() string {
-	return "share.space"
+	return "share.spaces"
 }
