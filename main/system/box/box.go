@@ -1,47 +1,37 @@
 package box
 
-import (
-	"context"
-	"os"
+var Box Storage
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-)
+// func Setup() (err error) {
+// 	endpoint := os.Getenv("BUCKET_ENDPOINT")
+// 	accesskey := os.Getenv("BUCKET_ACCESS_KEY")
+// 	secretkey := os.Getenv("BUCKET_SECRET_KEY")
 
-var Box *s3.Client
+// 	cfg, err := config.LoadDefaultConfig(context.TODO(),
+// 		config.WithBaseEndpoint(endpoint),
+// 		config.WithCredentialsProvider(
+// 			credentials.
+// 				NewStaticCredentialsProvider(
+// 					accesskey,
+// 					secretkey,
+// 					"",
+// 				),
+// 		),
+// 		config.WithRegion("us-east-1"),
+// 	)
 
-func Setup() (err error) {
-	endpoint := os.Getenv("BUCKET_ENDPOINT")
-	accesskey := os.Getenv("BUCKET_ACCESS_KEY")
-	secretkey := os.Getenv("BUCKET_SECRET_KEY")
+// 	if err != nil {
+// 		return
+// 	}
 
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithBaseEndpoint(endpoint),
-		config.WithCredentialsProvider(
-			credentials.
-				NewStaticCredentialsProvider(
-					accesskey,
-					secretkey,
-					"",
-				),
-		),
-		config.WithRegion("us-east-1"),
-	)
+// 	Box := s3.NewFromConfig(cfg)
 
-	if err != nil {
-		return
-	}
+// 	_, err = Box.CreateBucket(
+// 		context.TODO(),
+// 		&s3.CreateBucketInput{
+// 			Bucket: aws.String("default"),
+// 		},
+// 	)
 
-	Box := s3.NewFromConfig(cfg)
-
-	_, err = Box.CreateBucket(
-		context.TODO(),
-		&s3.CreateBucketInput{
-			Bucket: aws.String("default"),
-		},
-	)
-
-	return
-}
+// 	return
+//}
