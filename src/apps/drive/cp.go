@@ -1,4 +1,4 @@
-package main
+package drive
 
 import (
 	"fmt"
@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/bim-z/mathrock/src/system"
+	"github.com/bim-z/mathrock/src/system/auth"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 )
 
-var cp = &cobra.Command{
+var Copy = &cobra.Command{
 	Use:   "cp [name] [version]",
 	Short: "Copies a specific file version",
 	Args:  cobra.MinimumNArgs(2),
@@ -22,7 +24,7 @@ var cp = &cobra.Command{
 			return fmt.Errorf("failed to create HTTP request: %w", err)
 		}
 
-		token, err := bearer()
+		token, err := auth.Bearer()
 		if err != nil {
 			return fmt.Errorf("failed to get authentication token: %w", err)
 		}
@@ -38,7 +40,7 @@ var cp = &cobra.Command{
 		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
-			msg, err := parse(res.Body)
+			msg, err := system.Parse(res.Body)
 			if err != nil {
 				return fmt.Errorf("server returned status %d, but failed to parse error message: %w", res.StatusCode, err)
 			}
