@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bim-z/mathrock/main/system/red"
 	"github.com/redis/go-redis/v9"
@@ -34,10 +36,26 @@ func (s Simple) Put(key string, data io.Reader) (err error) {
 	return status.Err()
 }
 
-func (s Simple) Get(key string) {
+func (s Simple) Get(key string) (data io.Reader, err error) {
+	out, err := s.storage.GetObject(context.Background(), &s3.GetObjectInput{
+		Key: &key,
+	})
+
+	if err != nil {
+		return
+	}
+
+	data = out.Body
+	return
 }
 
-func (s Simple) Delete(key string) {}
+func (s Simple) Delete(key string) (err error) {
+	_, err = s.storage.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		Key: &key,
+	})
+
+	return
+}
 
 func (s Simple) Exist(key string) (ok bool) {
 	status := red.Red.Get(context.Background(), key)
@@ -48,4 +66,39 @@ func (s Simple) Exist(key string) (ok bool) {
 	}
 
 	return true
+}
+
+func Setup() (s *Simple, err error) {
+	endpoint := os.Getenv("BUCKET_ENDPOINT")
+	accesskey := os.Getenv("BUCKET_ACCESS_KEY")
+	secretkey := os.Getenv("BUCKET_SECRET_KEY")
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithBaseEndpoint(endpoint),
+		config.WithCredentialsProvider(
+			credentials.
+				NewStaticCredentialsProvider(
+					accesskey,
+					secretkey,
+					"",
+				),
+		),
+		config.WithRegion("us-east-1"),
+	)
+
+	if err != nil {
+		return
+	}
+
+	s = new(Simple)
+	s.storage = s3.NewFromConfig(cfg)
+
+	_, err = s.storage.CreateBucket(
+		context.TODO(),
+		&s3.CreateBucketInput{
+			Bucket: aws.String("default"),
+		},
+	)
+
+	return s, nil
 }

@@ -1,19 +1,17 @@
 package drive
 
 import (
-	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/bim-z/mathrock/main/system/auth"
+	"github.com/bim-z/mathrock/main/system/box"
+	"github.com/bim-z/mathrock/main/system/db"
+	"github.com/bim-z/mathrock/main/system/db/model/drive"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/redis/go-redis/v9"
 )
 
 func up(ctx echo.Context) error {
@@ -21,10 +19,7 @@ func up(ctx echo.Context) error {
 
 	file, err := ctx.FormFile("file")
 	if err != nil {
-		return echo.NewHTTPError(
-			http.StatusBadRequest,
-			"file is required",
-		)
+		return echo.NewHTTPError(http.StatusBadRequest, "file is required")
 	}
 
 	descriptor, err := file.Open()
@@ -52,37 +47,11 @@ func up(ctx echo.Context) error {
 	}
 
 	hash := fmt.Sprintf("%x", hasher.Sum(nil))
-
-	_, err = rock.Rock.Get(context.Background(), hash).Result()
-	if err == redis.Nil {
-		_, err = storage.Box.PutObject(
-			context.Background(),
-			&s3.PutObjectInput{
-				Bucket: aws.String(os.Getenv("bucket_name")),
-				Key:    aws.String(hash),
-				Body:   descriptor,
-			})
-		if err != nil {
-			return echo.NewHTTPError(
-				http.StatusInternalServerError,
-				"failed to upload file to storage",
-			)
-		}
-
-		if err = rock.Rock.Set(context.Background(), hash, "1", 0).Err(); err != nil {
-			return echo.NewHTTPError(
-				http.StatusInternalServerError,
-				"failed to save file metadata",
-			)
-		}
-	} else if err != nil && !errors.Is(err, redis.Nil) {
-		return echo.NewHTTPError(
-			http.StatusInternalServerError,
-			"unexpected error while checking file status",
-		)
+	if err = box.Box.Put(hash, descriptor); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	record := model.File{
+	record := drive.File{
 		ID:     uuid.NewString(),
 		UserID: userid,
 		Name:   file.Filename,

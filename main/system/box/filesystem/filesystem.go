@@ -3,10 +3,12 @@ package filesystem
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
 
+	"github.com/adrg/xdg"
 	"github.com/bim-z/mathrock/main/system/red"
 	"github.com/redis/go-redis/v9"
 )
@@ -15,7 +17,7 @@ type Filesystem struct {
 	home string
 }
 
-func (f Filesystem) Put(key string, data io.Reader) (err error) {
+func (f *Filesystem) Put(key string, data io.Reader) (err error) {
 	if f.Exist(key) {
 		return
 	}
@@ -36,7 +38,29 @@ func (f Filesystem) Put(key string, data io.Reader) (err error) {
 	return status.Err()
 }
 
-func (f Filesystem) Exist(key string) (ok bool) {
+func (f *Filesystem) Get(key string) (data io.Reader, err error) {
+	if !f.Exist(key) {
+		return nil, fmt.Errorf("object not found")
+	}
+
+	file, err := os.Open(path.Join(f.home, key))
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	return file, nil
+}
+
+func (f *Filesystem) Delete(key string) (err error) {
+	if !f.Exist(key) {
+		return fmt.Errorf("object not found")
+	}
+
+	return os.Remove(path.Join(f.home, key))
+}
+
+func (f *Filesystem) Exist(key string) (ok bool) {
 	status := red.Red.Get(context.Background(), key)
 	if status.Err() != nil {
 		if errors.Is(status.Err(), redis.Nil) {
@@ -45,4 +69,10 @@ func (f Filesystem) Exist(key string) (ok bool) {
 	}
 
 	return true
+}
+
+func Setup() (f *Filesystem) {
+	f = new(Filesystem)
+	f.home = xdg.DataHome
+	return
 }

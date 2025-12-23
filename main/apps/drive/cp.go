@@ -4,7 +4,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/bim-z/mathrock/main/system/auth"
+	"github.com/bim-z/mathrock/main/system/box"
+	"github.com/bim-z/mathrock/main/system/db"
+	"github.com/bim-z/mathrock/main/system/db/model/drive"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
@@ -22,8 +25,8 @@ func cp(ctx echo.Context) (err error) {
 	defer tx.Rollback()
 
 	var result struct {
-		File    model.File    `gorm:"embedded"`
-		Version model.Version `gorm:"embedded"`
+		File    drive.File    `gorm:"embedded"`
+		Version drive.Version `gorm:"embedded"`
 	}
 
 	// query the specific file version record
@@ -46,10 +49,7 @@ func cp(ctx echo.Context) (err error) {
 	}
 
 	// fetch the object from S3 storage using the version hash
-	object, err := storage.Box.GetObject(ctx.Request().Context(), &s3.GetObjectInput{
-		Key: &result.Version.Hash,
-	})
-
+	data, err := box.Box.Get(result.Version.Hash)
 	if err != nil {
 		return echo.NewHTTPError(
 			http.StatusInternalServerError,
@@ -58,5 +58,5 @@ func cp(ctx echo.Context) (err error) {
 	}
 
 	// stream the file content back to the client
-	return ctx.Stream(http.StatusOK, "application/octet-stream", object.Body)
+	return ctx.Stream(http.StatusOK, "application/octet-stream", data)
 }

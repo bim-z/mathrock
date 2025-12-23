@@ -1,23 +1,19 @@
 package drive
 
 import (
-	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/bim-z/mathrock/main/system/auth"
+	"github.com/bim-z/mathrock/main/system/box"
+	"github.com/bim-z/mathrock/main/system/db"
+	"github.com/bim-z/mathrock/main/system/db/model/drive"
 	"github.com/labstack/echo/v4"
-	"github.com/redis/go-redis/v9"
 )
 
-func save(ctx echo.Context) error {
-	userid := auth.UserId(ctx)
-
+func save(ctx echo.Context) (err error) {
 	header, err := ctx.FormFile("file")
 	if err != nil {
 		return echo.NewHTTPError(
@@ -55,9 +51,11 @@ func save(ctx echo.Context) error {
 	defer tx.Rollback()
 
 	var result struct {
-		File    model.File    `gorm:"embedded"`
-		Version model.Version `gorm:"embedded"`
+		File    drive.File    `gorm:"embedded"`
+		Version drive.Version `gorm:"embedded"`
 	}
+
+	userid := auth.UserId(ctx)
 
 	// query for the last version of the file
 	if err = tx.Table("files").
@@ -75,49 +73,19 @@ func save(ctx echo.Context) error {
 	}
 
 	if result.Version.Hash == hash {
-		// return 400 if file hash is the same (no changes)
 		return echo.NewHTTPError(
 			http.StatusBadRequest,
 			"no changes detected",
 		)
 	}
 
-	// check if the file object already exists in storage cache (redis)
-	_, err = rock.Rock.Get(context.Background(), hash).Result()
-	if err == redis.Nil {
-		// if not exists, upload the object to S3
-		_, err := storage.Box.PutObject(context.Background(), &s3.PutObjectInput{
-			Bucket: aws.String(os.Getenv("bucket_name")),
-			Key:    aws.String(hash),
-			Body:   descriptor,
-		})
-		if err != nil {
-			// internal error during S3 upload
-			return echo.NewHTTPError(
-				http.StatusInternalServerError,
-				"failed to upload file",
-			)
-		}
-
-		// store file hash metadata in redis
-		if err = rock.Rock.Set(context.Background(), hash, "1", 0).Err(); err != nil {
-			// internal error when saving metadata to redis
-			return echo.NewHTTPError(
-				http.StatusInternalServerError,
-				"failed to store metadata",
-			)
-		}
-	} else if err != nil && !errors.Is(err, redis.Nil) {
-		// internal error during redis status check
-		return echo.NewHTTPError(
-			http.StatusInternalServerError,
-			"failed to check file status",
-		)
+	if err = box.Box.Put(hash, descriptor); err != nil {
+		return
 	}
 
 	nextver := result.Version.Ver + 1
 
-	newver := model.Version{
+	newver := drive.Version{
 		FileID: result.File.ID,
 		Ver:    nextver,
 		Hash:   hash,
@@ -133,7 +101,7 @@ func save(ctx echo.Context) error {
 	}
 
 	// update the main file record with the new hash
-	if err := tx.Model(&model.File{}).
+	if err := tx.Model(&drive.File{}).
 		Where("id = ?", result.File.ID).
 		Update("hash", hash).Error; err != nil {
 		return echo.NewHTTPError(

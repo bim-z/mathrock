@@ -5,7 +5,10 @@ import (
 	"net/http"
 
 	"github.com/bim-z/mathrock/main/system/auth"
+	"github.com/bim-z/mathrock/main/system/db"
+	"github.com/bim-z/mathrock/main/system/db/model/drive"
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 func Clear(ctx echo.Context) (err error) {
@@ -20,7 +23,7 @@ func Clear(ctx echo.Context) (err error) {
 	defer tx.Rollback()
 
 	var result struct {
-		File      model.File `gorm:"embedded"`
+		File      drive.File `gorm:"embedded"`
 		VersionID uint       `gorm:"column:version_id"`
 		Hash      string     `gorm:"column:version_hash"`
 	}
@@ -53,14 +56,14 @@ func Clear(ctx echo.Context) (err error) {
 
 	if err = tx.Unscoped().
 		Where("file_id = ? AND id != ?", latestid, latestverid).
-		Delete(&model.Version{}).Error; err != nil {
+		Delete(&drive.Version{}).Error; err != nil {
 		return echo.NewHTTPError(
 			http.StatusInternalServerError,
 			"failed to delete old versions",
 		)
 	}
 
-	if err = tx.Model(&model.Version{}).
+	if err = tx.Model(&drive.Version{}).
 		Where("id = ?", latestverid).
 		Update("version", 1).Error; err != nil {
 		return echo.NewHTTPError(
@@ -70,7 +73,7 @@ func Clear(ctx echo.Context) (err error) {
 	}
 
 	// update the main file record's hash to the latest version's hash (which is the correct hash, not the version ID)
-	if err = tx.Model(&model.File{}).
+	if err = tx.Model(&drive.File{}).
 		Where("id = ?", latestid).
 		Update("hash", latesthash).Error; err != nil {
 		return echo.NewHTTPError(

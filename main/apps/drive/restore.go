@@ -4,6 +4,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/bim-z/mathrock/main/system/auth"
+	"github.com/bim-z/mathrock/main/system/db"
+	"github.com/bim-z/mathrock/main/system/db/model/drive"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 )
@@ -11,8 +14,7 @@ import (
 func restore(ctx echo.Context) error {
 	userid, name := auth.UserId(ctx), ctx.Param("name")
 	if name == "" {
-		return echo.NewHTTPError(
-			http.StatusBadRequest,
+		return echo.NewHTTPError(http.StatusBadRequest,
 			"name is required",
 		)
 	}
@@ -21,7 +23,7 @@ func restore(ctx echo.Context) error {
 	defer tx.Rollback()
 
 	// check if the file exists and is currently soft-deleted by the user
-	var file model.File
+	var file drive.File
 
 	// use Unscoped() to search for soft-deleted records (where deleted_at is not NULL).
 	// also ensure it not currently locked.
@@ -42,7 +44,7 @@ func restore(ctx echo.Context) error {
 
 	// perform the restoration (set deleted_at to NULL)
 	result := tx.Unscoped().
-		Model(&model.File{}).
+		Model(&drive.File{}).
 		Where("id = ?", file.ID).
 		UpdateColumn("deleted_at", nil)
 
