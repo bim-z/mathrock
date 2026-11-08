@@ -8,6 +8,7 @@ func add() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		Short: "",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			return
 		},
 	}
 }
